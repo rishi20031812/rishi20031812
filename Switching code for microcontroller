@@ -1,0 +1,187 @@
+
+
+--------LOGIC PREFACE------------
+A Controller is to be implemented to Switch between the Sources 
+whenever the required Power demand in not met. In this case we are 
+considering three Sources of Power 
+1)Renewable Energy Source(Wind), 2)Power from Grid, 3)A Backup 
+Battery. 
+Wind Energy should be prioritized for Drawing Power since it is the 
+Renewable source. Hence the design of controller should be switching 
+based logic. The EV Charging System Should be Connected to the Wind 
+Source initially. A Sensor should be placed at the junction of the controller 
+and the Wind source which should always sense the Power output from the 
+Wind Source. If the Power from the Wind does not meet the Power 
+Requirement then the Switching Action needs to be performed So that the 
+required Power for EV is given to the System. Total Power from Wind 
+should be utilized if the Wind Power is greater than required Battery 
+Power then the Remining Wind Power should be sent to grid. 
+When Wind Power is less than Required battery power then the remaining 
+sources should be made use to satisfy the whole Battery need. So, a sensor 
+need to monitor the Power from Different Source constantly and the 
+Sensor should give signal to the Controller to adjust it switching based on 
+it. 
+
+
+----------Conditions and Constraints------------ 
+Power from different sources need to be compared.   
+Conditions: 
+1) if  Wind_Power  >=  Battery_Power 
+Then Power should be drawn from Wind for EV  
+Additional Power sent to Grid 
+2) if  Wind_Power > 0 ,but < Battery_Power 
+Then Power should be taken from Wind and Grid 
+If Grid Power does not meet requirement 
+Then take the remaining power from Backup 
+3) If Wind_Power = 0 then Power should be taken from Grid 
+If Grid_Power < required power 
+then take from backup 
+4)If neither Wind nor Grid Power is available  
+Then take Power from Backup 
+5) If none of the above is available then  No Power available.
+
+
+-----------------------CODE---------------------
+clear a; 
+ 
+% Constants 
+wind_turbine_efficiency = 0.35;  % Efficiency of the wind turbine 
+air_density = 1.225;             % Air density in kg/m^3 
+blade_area = 10;                 % Blade swept area in m^2 (example value) 
+ 
+% Inputs 
+wind_speed = 10;       % Wind speed in m/s (example value) 
+P_grid = 300;          % Sample Power available from grid (in watts) 
+P_backup = 1000;       % Sample Power available from backup battery (in watts) 
+P_ev_required = 1000;  % Sample Power required to charge EV battery (in watts) 
+ 
+% Calculate power from wind speed 
+P_wind = 0.5 * air_density * blade_area * wind_speed^3 * 
+wind_turbine_efficiency; 
+ 
+clear a; 
+ 
+% Constants for conversion (these should be determined based on your sensor 
+specifications) 
+analog_reference_voltage = 5;    % Reference voltage for Arduino analog input 
+(5V for most Arduino boards) 
+adc_resolution = 1024;           % ADC resolution (10-bit ADC) 
+ 
+% Example constants for power conversion (replace these with calibration data 
+for your sensors) 
+voltage_to_power_conversion_wind = 100; % Conversion factor for wind power 
+sensor (example value) 
+voltage_to_power_conversion_grid = 100; % Conversion factor for grid power 
+sensor (example value) 
+ 
+% Required power for EV battery 
+P_ev_required = 1000;  % Sample Power required to charge EV battery (in watts) 
+ 
+% Initialize control actions and alarm 
+action_wind_to_ev = 0; 
+action_wind_to_grid = 0; 
+action_grid_to_ev = 0; 
+action_backup_to_ev = 0; 
+alarm = 0; 
+ 
+% Setup Arduino 
+a = arduino('COM5', 'Uno'); % COM Port available in PC/Laptop and Board type  
+ 
+% Define output pins 
+pin_wind_to_ev = 'D2'; 
+pin_wind_to_grid = 'D4'; 
+pin_grid_to_ev = 'D6'; 
+pin_backup_to_ev = 'D8'; 
+pin_alarm = 'D10'; 
+ 
+% Set pins as output 
+configurePin(a, pin_wind_to_ev, 'DigitalOutput'); 
+configurePin(a, pin_wind_to_grid, 'DigitalOutput'); 
+configurePin(a, pin_grid_to_ev, 'DigitalOutput'); 
+configurePin(a, pin_backup_to_ev, 'DigitalOutput'); 
+configurePin(a, pin_alarm, 'DigitalOutput'); 
+ 
+% Read analog inputs from power sensors 
+wind_sensor_value = readVoltage(a, 'A0'); 
+grid_sensor_value = readVoltage(a, 'A1'); 
+ 
+% Convert sensor values to power values 
+P_wind = wind_sensor_value * voltage_to_power_conversion_wind; 
+P_grid = grid_sensor_value * voltage_to_power_conversion_grid; 
+ 
+% Backup power is assumed to be a constant for this example 
+P_backup = 1000; 
+ 
+% Logic for control actions 
+if P_wind >= P_ev_required 
+    action_wind_to_ev = P_ev_required; 
+    action_wind_to_grid = P_wind - P_ev_required; 
+    action_grid_to_ev = 0; 
+    action_backup_to_ev = 0; 
+elseif P_wind > 0 && P_wind < P_ev_required && P_grid > P_ev_required 
+    action_wind_to_ev = P_wind; 
+    action_grid_to_ev = P_ev_required - P_wind; 
+    action_backup_to_ev = 0; 
+elseif P_wind == 0 && P_grid > 0 && P_grid < P_ev_required 
+    action_wind_to_ev = 0; 
+    action_grid_to_ev = P_grid; 
+    action_backup_to_ev = P_ev_required - P_grid; 
+elseif P_wind == 0 && P_grid > 0 && P_grid > P_ev_required 
+    action_wind_to_ev = 0; 
+    action_grid_to_ev = P_ev_required; 
+elseif P_wind == 0 && P_grid == 0 && P_backup >= P_ev_required 
+    action_wind_to_ev = 0; 
+    action_grid_to_ev = 0; 
+    action_backup_to_ev = P_ev_required; 
+elseif P_wind > 0 && P_wind < P_ev_required && P_backup > 0 && P_backup < 
+P_ev_required && P_grid > 0 && P_grid < P_ev_required 
+    if P_wind + P_grid + P_backup > P_ev_required 
+        action_wind_to_ev = P_wind; 
+        action_grid_to_ev = P_grid; 
+        action_backup_to_ev = P_ev_required - (P_grid + P_wind); 
+    elseif P_wind + P_grid + P_backup == P_ev_required 
+        action_wind_to_ev = P_wind; 
+        action_grid_to_ev = P_grid; 
+        action_backup_to_ev = P_backup; 
+    end 
+else 
+    alarm = 1;  % Set alarm if no power source is available to meet the 
+requirement 
+end 
+ 
+% Function to transfer power with pulse 
+function transferPower(a, pin, power) 
+    while power > 0 
+        writeDigitalPin(a, pin, 1); 
+        pause(0.25); % Pulse width as necessary 
+        writeDigitalPin(a, pin, 0); 
+        pause(0.25); % Pulse width as necessary 
+        power = power - 10; % Decrement value as necessary 
+    end 
+end 
+ 
+% Control Arduino output based on actions 
+if action_wind_to_ev > 0 
+    transferPower(a, pin_wind_to_ev, action_wind_to_ev); 
+end 
+if action_wind_to_grid > 0 
+    transferPower(a, pin_wind_to_grid, action_wind_to_grid); 
+end 
+if action_grid_to_ev > 0 
+    transferPower(a, pin_grid_to_ev, action_grid_to_ev); 
+end 
+if action_backup_to_ev > 0 
+    transferPower(a, pin_backup_to_ev, action_backup_to_ev); 
+end 
+writeDigitalPin(a, pin_alarm, alarm > 0); 
+ 
+% Display results 
+disp('Control Actions:') 
+disp(['Wind to EV: ', num2str(action_wind_to_ev), ' W']) 
+disp(['Wind to Grid: ', num2str(action_wind_to_grid), ' W']) 
+disp(['Grid to EV: ', num2str(action_grid_to_ev), ' W']) 
+disp(['Backup to EV: ', num2str(action_backup_to_ev), ' W']) 
+disp(['Alarm: ', num2str(alarm)]) 
+ 
+% Note: For real-time wind simulation and grid changes, adapt the code 
+accordingly.
